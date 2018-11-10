@@ -18,6 +18,11 @@ library(tidyverse)
 library(gapminder)
 library(knitr)
 library(broom)
+library(stringr)
+library(singer)
+library(ggmap)
+library(repurrrsive)
+library(readxl)
 ```
 
 ### Overview
@@ -38,23 +43,123 @@ Pick one:
 
 -   Write one (or more) functions that do something useful to pieces of the Gapminder or Singer data. It is logical to think about computing on the mini-data frames corresponding to the data for each specific country, location, year, band, album, ... This would pair well with the prompt below about working with a nested data frame, as you could apply your function there.
     -   Make it something you can't easily do with built-in functions. Make it something that's not trivial to do with the simple `dplyr` verbs. The linear regression function [presented here](http://stat545.com/block012_function-regress-lifeexp-on-year.html) is a good starting point. You could generalize that to do quadratic regression (include a squared term) or use robust regression, using `MASS::rlm()` or `robustbase::lmrob()`.
--   If you plan to complete the homework where we build an R package, write a couple of experimental functions exploring some functionality that is useful to you in real life and that might form the basis of your personal package.
 
-### 3. Work with the candy data
+Let's make a function that fits a linear model between pop and gdpPercap for a specific continent in a specific year:
 
-In 2015, we explored a dataset based on a [Halloween candy survey](https://github.com/jennybc/candy) (but it included many other odd and interesting questions). Work on something from [this homework from 2015](references/2015_hw.md). It is good practice on basic data ingest, exploration, character data cleanup, and wrangling.
+``` r
+lm_lE_gdp <- function(cont, yr) {
+  gap_select <- gapminder %>% filter(continent == cont, year == yr)
+  lm(lifeExp ~ gdpPercap, data = gap_select)
+}
+```
+
+Let's see if it works for Europe in 1952:
+
+``` r
+Eur_1952 <- lm_lE_gdp("Europe", "1952")
+```
+
+Let's get the r squared value to see if our model is a good fit, using the `glance` function from the `broom` package:
+
+``` r
+Eur_1952_glance <- glance(Eur_1952)
+
+Eur_1952_glance$r.squared
+```
+
+    ## [1] 0.6084326
+
+Not a super strong correlation between life expectancy and GDP per capita.
+
+Let's also make a function for plotting it:
+
+``` r
+plot_lE_gdp_lm <- function(cont, yr){
+  gapminder %>% 
+  filter(continent == cont, year == yr) %>% 
+  ggplot(aes(lifeExp, gdpPercap))+
+  geom_point() +
+  geom_smooth(method =lm, se=FALSE) +
+  labs(title = str_c("Correlation between Life Expectancy and GDP Per Capita in ", cont, " in ", yr), x= "Life Expectancy", y = "GDP Per Capita")
+}
+
+plot_lE_gdp_lm("Europe", "1952")
+```
+
+![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-5-1.png)
 
 ### 4. Work with the `singer` data
 
+I originally wanted to do this but am not able to get any locations. I am guessing that that is because I exceeded the max of 2500 queries a day since I didn't try on a smaller subset of data first (the data contains more than 2500 locations). I would still be interested to know if the code is correct. :)
+
 The `singer_location` dataframe in the `singer` package contains geographical information stored in two different formats: 1. as a (dirty!) variable named `city`; 2. as a latitude / longitude pair (stored in `latitude`, `longitude` respectively). The function `revgeocode` from the `ggmap` library allows you to retrieve some information for a pair (vector) of longitude, latitude (warning: notice the order in which you need to pass lat and long). Read its manual page.
+
+``` r
+# have a look at data set
+kable(head(singer_locations))
+```
+
+| track\_id          | title                 | song\_id           | release             | artist\_id         | artist\_name                   |  year|  duration|  artist\_hotttnesss|  artist\_familiarity|  latitude|  longitude| name          | city         |
+|:-------------------|:----------------------|:-------------------|:--------------------|:-------------------|:-------------------------------|-----:|---------:|-------------------:|--------------------:|---------:|----------:|:--------------|:-------------|
+| TRWICRA128F42368DB | The Conversation (Cd) | SOSURTI12A81C22FB8 | Even If It Kills Me | ARACDPV1187FB58DF4 | Motion City Soundtrack         |  2007|  170.4485|           0.6410183|            0.8230522|        NA|         NA| NA            | NA           |
+| TRXJANY128F42246FC | Lonely Island         | SODESQP12A6D4F98EF | The Duke Of Earl    | ARYBUAO1187FB3F4EB | Gene Chandler                  |  2004|  106.5530|           0.3937627|            0.5700167|  41.88415|  -87.63241| Gene Chandler | Chicago, IL  |
+| TRIKPCA128F424A553 | Here's That Rainy Day | SOQUYQD12A8C131619 | Imprompture         | AR4111G1187B9B58AB | Paul Horn                      |  1998|  527.5947|           0.4306226|            0.5039940|  40.71455|  -74.00712| Paul Horn     | New York, NY |
+| TRYEATD128F92F87C9 | Rego Park Blues       | SOEZGRC12AB017F1AC | Still River         | ARQDZP31187B98D623 | Ronnie Earl & the Broadcasters |  1995|  695.1179|           0.3622792|            0.4773099|        NA|         NA| NA            | NA           |
+| TRBYYXH128F4264585 | Games                 | SOPIOCP12A8C13A322 | Afro-Harping        | AR75GYU1187B9AE47A | Dorothy Ashby                  |  1968|  237.3220|           0.4107520|            0.5303468|  42.33168|  -83.04792| Dorothy Ashby | Detroit, MI  |
+| TRKFFKR128F9303AE3 | More Pipes            | SOHQSPY12AB0181325 | Six Yanks           | ARCENE01187B9AF929 | Barleyjuice                    |  2006|  192.9400|           0.3762635|            0.5412950|  40.99471|  -77.60454| Barleyjuice   | Pennsylvania |
 
 1.  Use `purrr` to map latitude and longitude into human readable information on the band's origin places. Notice that `revgeocode(... , output = "more")` outputs a dataframe, while `revgeocode(... , output = "address")` returns a string: you have the option of dealing with nested dataframes.
     You will need to pay attention to two things:
     -   Not all of the track have a latitude and longitude: what can we do with the missing information? (*filtering*, ...)
     -   Not all of the time we make a research through `revgeocode()` we get a result. What can we do to avoid those errors to bite us? (look at *possibly()* in `purrr`...)
-2.  Try to check wether the place in `city` corresponds to the information you retrieved.
 
-3.  If you still have time, you can go visual: give a look to the library [`leaflet`](https://rstudio.github.io/leaflet) and plot some information about the bands. A snippet of code is provided below.
+First, I will make a tibble that includes the artist, the city and the longitude and latitude:
+
+``` r
+# select artist_name, latitude, longitude, and city
+artist_location <- singer_locations %>% select(artist_name, latitude, longitude, city)
+
+# check it out
+kable(head(artist_location))
+```
+
+| artist\_name                   |  latitude|  longitude| city         |
+|:-------------------------------|---------:|----------:|:-------------|
+| Motion City Soundtrack         |        NA|         NA| NA           |
+| Gene Chandler                  |  41.88415|  -87.63241| Chicago, IL  |
+| Paul Horn                      |  40.71455|  -74.00712| New York, NY |
+| Ronnie Earl & the Broadcasters |        NA|         NA| NA           |
+| Dorothy Ashby                  |  42.33168|  -83.04792| Detroit, MI  |
+| Barleyjuice                    |  40.99471|  -77.60454| Pennsylvania |
+
+Let's get rid of all the artist of which there is no location noted:
+
+``` r
+#drop NAs
+artist_location <- artist_location %>% drop_na
+
+# print new tibble without NAs
+kable(head(artist_location))
+```
+
+| artist\_name                                |  latitude|   longitude| city         |
+|:--------------------------------------------|---------:|-----------:|:-------------|
+| Gene Chandler                               |  41.88415|   -87.63241| Chicago, IL  |
+| Paul Horn                                   |  40.71455|   -74.00712| New York, NY |
+| Dorothy Ashby                               |  42.33168|   -83.04792| Detroit, MI  |
+| Barleyjuice                                 |  40.99471|   -77.60454| Pennsylvania |
+| Madlib                                      |  34.20034|  -119.18044| Oxnard, CA   |
+| Seeed's Pharaoh Riddim Feat. General Degree |  50.73230|     7.10169| Bonn         |
+
+``` r
+get_location <- function(x, y) revgeocode(c(x,y), output = "address")
+
+#map2(artist_location$longitude, artist_location$latitude, get_location)
+```
+
+1.  Try to check wether the place in `city` corresponds to the information you retrieved.
+
+2.  If you still have time, you can go visual: give a look to the library [`leaflet`](https://rstudio.github.io/leaflet) and plot some information about the bands. A snippet of code is provided below.
 
 <!-- -->
 
@@ -68,6 +173,27 @@ The `singer_location` dataframe in the `singer` package contains geographical in
 Work through and write up a lesson from the [purrr tutorial](https://jennybc.github.io/purrr-tutorial/index.html):
 
 -   [Trump Android Tweets](https://jennybc.github.io/purrr-tutorial/ls08_trump-tweets.html)
+
+``` r
+load("HW06-Data_wrangling_wrap_up_files/trump_tweets_df.rda")
+```
+
+``` r
+tweets <- trump_tweets_df$text
+head(tweets)
+```
+
+    ## [1] "My economic policy speech will be carried live at 12:15 P.M. Enjoy!"                                                                       
+    ## [2] "Join me in Fayetteville, North Carolina tomorrow evening at 6pm. Tickets now available at: https://t.co/Z80d4MYIg8"                        
+    ## [3] "#ICYMI: \"Will Media Apologize to Trump?\" https://t.co/ia7rKBmioA"                                                                        
+    ## [4] "Michael Morell, the lightweight former Acting Director of C.I.A., and a man who has made serious bad calls, is a total Clinton flunky!"    
+    ## [5] "The media is going crazy. They totally distort so many things on purpose. Crimea, nuclear, \"the baby\" and so much more. Very dishonest!" 
+    ## [6] "I see where Mayor Stephanie Rawlings-Blake of Baltimore is pushing Crooked hard. Look at the job she has done in Baltimore. She is a joke!"
+
+``` r
+regex <- "badly|crazy|weak|spent|strong|dumb|joke|guns|funny|dead"
+```
+
 -   [Simplifying data from a list of GitHub users](https://jennybc.github.io/purrr-tutorial/ls02_map-extraction-advanced.html)
 
 ### 6. Work with a nested data frame
@@ -80,6 +206,7 @@ Here's a fully developed prompt for Gapminder:
 -   Nest the data by country (and continent).
 
 ``` r
+# nest gapminder data for each country
 gap_nested <- gapminder %>% 
   group_by(continent, country) %>% 
   nest()
@@ -100,6 +227,7 @@ head(gap_nested)
 Now our data consists of one row for each country with a nested list for each country that contains all of the other data for this country in the data column. Let's have a look at what is in this list for the first country (Afghanistan):
 
 ``` r
+# have a look at contents in data list of first country
 kable(gap_nested$data[[1]], format = "html", caption = gap_nested$country[1])
 ```
 
@@ -306,10 +434,11 @@ gapminder %>%
   ggplot(aes(year, lifeExp)) +
   geom_point()+
   geom_smooth(method = lm, size = 0.5) +
-  facet_wrap(~country)
+  facet_wrap(~country) +
+  labs(title = "Life Expectancy over the years for a selection of countries", x = "Year", y = "Life Expectancy")
 ```
 
-![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-4-1.png)
+![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-16-1.png)
 
 Cool, life expectancy seems to be linearly increasing over the years for all of these random countries. Let's fit a linear model to see if that is actually the case for all countries. Using the nested data frame `gap_nested` and the `map` function allows us to do that for all countries at the same time.
 
@@ -395,7 +524,11 @@ So we have the results from the linear model in each of these nested lists per c
 -   Use functions for working with fitted models or the [broom package](https://github.com/tidyverse/broom) to get information out of your linear models.
 
 ``` r
-kable(tidy(gap_nested_fit$fit[[1]]))
+# make function that applies broom function to the Afghanistan fit data and presents it in a kable
+broom_apply_Afgh <- function(x) kable(x(gap_nested_fit$fit[[1]]))
+
+# apply broom::tidy to linear model output data from Afghanistan
+broom_apply_Afgh(tidy)
 ```
 
 | term           |    estimate|  std.error|  statistic|  p.value|
@@ -406,7 +539,8 @@ kable(tidy(gap_nested_fit$fit[[1]]))
 We can also look at fitted values and residuals for Afghanistan with the `augment` function from the `broom` package:
 
 ``` r
-kable(augment(gap_nested_fit$fit[[1]]))
+# apply broom::augment to linear model output data from Afghanistan
+broom_apply_Afgh(augment)
 ```
 
 |  lifeExp|  I.year...1952.|   .fitted|    .se.fit|      .resid|       .hat|    .sigma|    .cooksd|  .std.resid|
@@ -427,7 +561,8 @@ kable(augment(gap_nested_fit$fit[[1]]))
 And the `glance` function gives us a nice one-row summary. Here for Afghanistan:
 
 ``` r
-kable(glance(gap_nested_fit$fit[[1]]))
+# apply broom::glance to linear model output data from Afghanistan
+broom_apply_Afgh(glance)
 ```
 
 |  r.squared|  adj.r.squared|     sigma|  statistic|  p.value|   df|     logLik|       AIC|       BIC|  deviance|  df.residual|
@@ -554,8 +689,12 @@ data %>%
   ggplot() +
   geom_point(aes(year, lifeExp), size = 0.5, colour = "red") +
   geom_point(aes(year, .fitted), size = 0.5, colour = "blue") +
-  geom_smooth(aes(year, .fitted), size = 0.5) +
-  facet_wrap(~country)
+  geom_smooth(aes(year, .fitted), size = 0.5, se = FALSE) +
+  facet_wrap(~country) +
+    theme_bw() +
+    labs(title = "Linear Model Estimates and Real Life Expectancy over the Years in Select Countries", 
+         x= "Year", 
+         y = "Life Expectancy") 
 }
 
 plot_lEY(lEY_fit_augment, country_selection) # plot randomly selected countries from above
@@ -563,7 +702,7 @@ plot_lEY(lEY_fit_augment, country_selection) # plot randomly selected countries 
 
     ## `geom_smooth()` using method = 'loess' and formula 'y ~ x'
 
-![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-18-1.png)
+![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-30-1.png)
 
 We can see that the residuals are really close to the estimated life expectancies from our model. Let's see if we can find the country with the biggest residuals:
 
@@ -601,7 +740,7 @@ plot_lEY(lEY_fit_augment, lEY_max_res_countries)
 
     ## `geom_smooth()` using method = 'loess' and formula 'y ~ x'
 
-![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-20-1.png)
+![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-32-1.png)
 
 We can see that the linear model is not a great fit in these countries.
 
@@ -643,7 +782,7 @@ plot_lEY(lEY_fit_augment, lEY_max_r2_countries)
 
     ## `geom_smooth()` using method = 'loess' and formula 'y ~ x'
 
-![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-23-1.png)
+![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-35-1.png)
 
 Let's see if we can find the countries with the steepest increase in lifeExp over the years. First I'll make the tidy data easier to work with.
 
@@ -700,7 +839,7 @@ plot_lEY(lEY_fit_augment, lEY_max_slope_countries)
 
     ## `geom_smooth()` using method = 'loess' and formula 'y ~ x'
 
-![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-26-1.png)
+![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-38-1.png)
 
 Inspiration for the modelling and downstream inspiration
 
