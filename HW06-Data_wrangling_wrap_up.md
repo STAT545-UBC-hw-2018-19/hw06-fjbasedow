@@ -1,7 +1,7 @@
 HW06-Data wrangling wrap up
 ================
 Frederike Basedow
-1 November 2018
+9 November 2018
 
 Homework 06: Data wrangling wrap up
 ===================================
@@ -10,108 +10,96 @@ Homework 06: Data wrangling wrap up
 
 ``` r
 library(tidyverse)
-```
-
-    ## Warning: package 'ggplot2' was built under R version 3.4.4
-
-``` r
 library(gapminder)
 library(knitr)
 library(broom)
 library(stringr)
 library(singer)
 library(ggmap)
-library(repurrrsive)
-library(readxl)
 ```
 
-### Overview
+### Writing functions
 
-Due November 09, 2018 at 23:59.
-
-This is the *first* assignment of STAT 547M (despite it being named Homework 06).
-
-Your task is to complete two of the six (numbered) topics below.
-
-### 1. Character data
-
-Read and work the exercises in the [Strings chapter](http://r4ds.had.co.nz/strings.html) or R for Data Science.
-
-### 2. Writing functions
-
-Pick one:
-
--   Write one (or more) functions that do something useful to pieces of the Gapminder or Singer data. It is logical to think about computing on the mini-data frames corresponding to the data for each specific country, location, year, band, album, ... This would pair well with the prompt below about working with a nested data frame, as you could apply your function there.
-    -   Make it something you can't easily do with built-in functions. Make it something that's not trivial to do with the simple `dplyr` verbs. The linear regression function [presented here](http://stat545.com/block012_function-regress-lifeexp-on-year.html) is a good starting point. You could generalize that to do quadratic regression (include a squared term) or use robust regression, using `MASS::rlm()` or `robustbase::lmrob()`.
-
-Let's make a function that fits a linear model between pop and gdpPercap for a specific continent in a specific year:
+Let's make a function that fits a linear model between `pop` and `gdpPercap for a specific continent in a specific year and extract info on the model with the`glance`function from the`broom\` package:
 
 ``` r
 lm_lE_gdp <- function(cont, yr) {
-  gap_select <- gapminder %>% filter(continent == cont, year == yr)
-  lm(lifeExp ~ gdpPercap, data = gap_select)
+  gap_select <- gapminder %>% filter(continent == cont, year == yr) # filter continent and year of choice
+  lm(lifeExp ~ gdpPercap, data = gap_select) %>% #fit linear model
+  glance() #extract info about model
 }
 ```
 
 Let's see if it works for Europe in 1952:
 
 ``` r
-Eur_1952 <- lm_lE_gdp("Europe", "1952")
+lm_lE_gdp("Europe", "1952")
 ```
 
-Let's get the r squared value to see if our model is a good fit, using the `glance` function from the `broom` package:
+    ##   r.squared adj.r.squared    sigma statistic      p.value df    logLik
+    ## 1 0.6084326     0.5944481 4.050929  43.50749 3.739183e-07  2 -83.50165
+    ##        AIC      BIC deviance df.residual
+    ## 1 173.0033 177.2069 459.4808          28
 
-``` r
-Eur_1952_glance <- glance(Eur_1952)
-
-Eur_1952_glance$r.squared
-```
-
-    ## [1] 0.6084326
-
-Not a super strong correlation between life expectancy and GDP per capita.
+Looking at the r squared value, we can tell that the fit is not amazing, i.e. the fitted values are not super close to the orignal values. However, the p-value is very low and considering an alpha of 0.05, the model is significant, i.e. there is a relationship between life expectancy and GDP per capita.
 
 Let's also make a function for plotting it:
 
 ``` r
+# make function to plot data from different continents and years
 plot_lE_gdp_lm <- function(cont, yr){
   gapminder %>% 
   filter(continent == cont, year == yr) %>% 
   ggplot(aes(lifeExp, gdpPercap))+
   geom_point() +
-  geom_smooth(method =lm, se=FALSE) +
-  labs(title = str_c("Correlation between Life Expectancy and GDP Per Capita in ", cont, " in ", yr), x= "Life Expectancy", y = "GDP Per Capita")
+  geom_smooth(method =lm, se=FALSE, size = 0.5) +
+  labs(title = str_c("Correlation between Life Expectancy and GDP Per Capita in ", cont, " in ", yr), x= "Life Expectancy", y = "GDP Per Capita")+
+  theme_bw()
 }
 
+# plot lifeExp vs. gdpPercap in Europe in 1952
 plot_lE_gdp_lm("Europe", "1952")
 ```
 
-![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-5-1.png)
+![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-4-1.png)
+
+Now we can easily fit a linear model for another continent in a different year. How about the Americas in 2007?
+
+``` r
+# fit linear model for lifeExp vs. gdpPercap for the Americas in 2007
+lm_lE_gdp("Americas", "2007")
+```
+
+    ##   r.squared adj.r.squared    sigma statistic     p.value df    logLik
+    ## 1  0.349241     0.3209471 3.659548  12.34334 0.001866495  2 -66.86468
+    ##        AIC     BIC deviance df.residual
+    ## 1 139.7294 143.386 308.0227          23
+
+The fit is worse than for Europe in 1952, but the correlation is still significant. Let's have a look at it:
+
+``` r
+# plot lifeExp vs. gdpPercap for the Americas in 2007
+plot_lE_gdp_lm("Americas", "2007")
+```
+
+![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-6-1.png)
+
+Yeah, looks like the residuals are bigger here than for Europe in 1952, but life expectancy seems to increase with time.
 
 ### 4. Work with the `singer` data
 
-I originally wanted to do this but am not able to get any locations. I am guessing that that is because I exceeded the max of 2500 queries a day since I didn't try on a smaller subset of data first (the data contains more than 2500 locations). I would still be interested to know if the code is correct. :)
-
-The `singer_location` dataframe in the `singer` package contains geographical information stored in two different formats: 1. as a (dirty!) variable named `city`; 2. as a latitude / longitude pair (stored in `latitude`, `longitude` respectively). The function `revgeocode` from the `ggmap` library allows you to retrieve some information for a pair (vector) of longitude, latitude (warning: notice the order in which you need to pass lat and long). Read its manual page.
+I originally wanted to do this tasks but I wasn't able to get any locations. I am guessing that is because I exceeded the max of 2500 queries a day since I didn't try on a smaller subset of data first (the data contains more than 2500 locations). I would still be interested to know if the code is correct. :)
 
 ``` r
 # have a look at data set
-kable(head(singer_locations))
+kable(head(singer_locations, 3))
 ```
 
-| track\_id          | title                 | song\_id           | release             | artist\_id         | artist\_name                   |  year|  duration|  artist\_hotttnesss|  artist\_familiarity|  latitude|  longitude| name          | city         |
-|:-------------------|:----------------------|:-------------------|:--------------------|:-------------------|:-------------------------------|-----:|---------:|-------------------:|--------------------:|---------:|----------:|:--------------|:-------------|
-| TRWICRA128F42368DB | The Conversation (Cd) | SOSURTI12A81C22FB8 | Even If It Kills Me | ARACDPV1187FB58DF4 | Motion City Soundtrack         |  2007|  170.4485|           0.6410183|            0.8230522|        NA|         NA| NA            | NA           |
-| TRXJANY128F42246FC | Lonely Island         | SODESQP12A6D4F98EF | The Duke Of Earl    | ARYBUAO1187FB3F4EB | Gene Chandler                  |  2004|  106.5530|           0.3937627|            0.5700167|  41.88415|  -87.63241| Gene Chandler | Chicago, IL  |
-| TRIKPCA128F424A553 | Here's That Rainy Day | SOQUYQD12A8C131619 | Imprompture         | AR4111G1187B9B58AB | Paul Horn                      |  1998|  527.5947|           0.4306226|            0.5039940|  40.71455|  -74.00712| Paul Horn     | New York, NY |
-| TRYEATD128F92F87C9 | Rego Park Blues       | SOEZGRC12AB017F1AC | Still River         | ARQDZP31187B98D623 | Ronnie Earl & the Broadcasters |  1995|  695.1179|           0.3622792|            0.4773099|        NA|         NA| NA            | NA           |
-| TRBYYXH128F4264585 | Games                 | SOPIOCP12A8C13A322 | Afro-Harping        | AR75GYU1187B9AE47A | Dorothy Ashby                  |  1968|  237.3220|           0.4107520|            0.5303468|  42.33168|  -83.04792| Dorothy Ashby | Detroit, MI  |
-| TRKFFKR128F9303AE3 | More Pipes            | SOHQSPY12AB0181325 | Six Yanks           | ARCENE01187B9AF929 | Barleyjuice                    |  2006|  192.9400|           0.3762635|            0.5412950|  40.99471|  -77.60454| Barleyjuice   | Pennsylvania |
-
-1.  Use `purrr` to map latitude and longitude into human readable information on the band's origin places. Notice that `revgeocode(... , output = "more")` outputs a dataframe, while `revgeocode(... , output = "address")` returns a string: you have the option of dealing with nested dataframes.
-    You will need to pay attention to two things:
-    -   Not all of the track have a latitude and longitude: what can we do with the missing information? (*filtering*, ...)
-    -   Not all of the time we make a research through `revgeocode()` we get a result. What can we do to avoid those errors to bite us? (look at *possibly()* in `purrr`...)
+| track\_id          | title                 | song\_id           | release             | artist\_id         | artist\_name           |  year|  duration|  artist\_hotttnesss|  artist\_familiarity|  latitude|  longitude| name          | city         |
+|:-------------------|:----------------------|:-------------------|:--------------------|:-------------------|:-----------------------|-----:|---------:|-------------------:|--------------------:|---------:|----------:|:--------------|:-------------|
+| TRWICRA128F42368DB | The Conversation (Cd) | SOSURTI12A81C22FB8 | Even If It Kills Me | ARACDPV1187FB58DF4 | Motion City Soundtrack |  2007|  170.4485|           0.6410183|            0.8230522|        NA|         NA| NA            | NA           |
+| TRXJANY128F42246FC | Lonely Island         | SODESQP12A6D4F98EF | The Duke Of Earl    | ARYBUAO1187FB3F4EB | Gene Chandler          |  2004|  106.5530|           0.3937627|            0.5700167|  41.88415|  -87.63241| Gene Chandler | Chicago, IL  |
+| TRIKPCA128F424A553 | Here's That Rainy Day | SOQUYQD12A8C131619 | Imprompture         | AR4111G1187B9B58AB | Paul Horn              |  1998|  527.5947|           0.4306226|            0.5039940|  40.71455|  -74.00712| Paul Horn     | New York, NY |
 
 First, I will make a tibble that includes the artist, the city and the longitude and latitude:
 
@@ -135,7 +123,7 @@ kable(head(artist_location))
 Let's get rid of all the artist of which there is no location noted:
 
 ``` r
-#drop NAs
+# drop NAs
 artist_location <- artist_location %>% drop_na
 
 # print new tibble without NAs
@@ -151,59 +139,20 @@ kable(head(artist_location))
 | Madlib                                      |  34.20034|  -119.18044| Oxnard, CA   |
 | Seeed's Pharaoh Riddim Feat. General Degree |  50.73230|     7.10169| Bonn         |
 
+And now let's see if we can retrieve the location info from the longitude and latitude for each artist:
+
 ``` r
+# make function to use revgeocode with two separate inputs
 get_location <- function(x, y) revgeocode(c(x,y), output = "address")
 
-#map2(artist_location$longitude, artist_location$latitude, get_location)
+#map2(artist_location$longitude, artist_location$latitude, get_location) 
 ```
 
-1.  Try to check wether the place in `city` corresponds to the information you retrieved.
-
-2.  If you still have time, you can go visual: give a look to the library [`leaflet`](https://rstudio.github.io/leaflet) and plot some information about the bands. A snippet of code is provided below.
-
-<!-- -->
-
-    singer_locations %>%  
-      leaflet()  %>%   
-      addTiles() %>%  
-      addCircles(popup = ~artist_name)
-
-### 5. Work with a list
-
-Work through and write up a lesson from the [purrr tutorial](https://jennybc.github.io/purrr-tutorial/index.html):
-
--   [Trump Android Tweets](https://jennybc.github.io/purrr-tutorial/ls08_trump-tweets.html)
-
-``` r
-load("HW06-Data_wrangling_wrap_up_files/trump_tweets_df.rda")
-```
-
-``` r
-tweets <- trump_tweets_df$text
-head(tweets)
-```
-
-    ## [1] "My economic policy speech will be carried live at 12:15 P.M. Enjoy!"                                                                       
-    ## [2] "Join me in Fayetteville, North Carolina tomorrow evening at 6pm. Tickets now available at: https://t.co/Z80d4MYIg8"                        
-    ## [3] "#ICYMI: \"Will Media Apologize to Trump?\" https://t.co/ia7rKBmioA"                                                                        
-    ## [4] "Michael Morell, the lightweight former Acting Director of C.I.A., and a man who has made serious bad calls, is a total Clinton flunky!"    
-    ## [5] "The media is going crazy. They totally distort so many things on purpose. Crimea, nuclear, \"the baby\" and so much more. Very dishonest!" 
-    ## [6] "I see where Mayor Stephanie Rawlings-Blake of Baltimore is pushing Crooked hard. Look at the job she has done in Baltimore. She is a joke!"
-
-``` r
-regex <- "badly|crazy|weak|spent|strong|dumb|joke|guns|funny|dead"
-```
-
--   [Simplifying data from a list of GitHub users](https://jennybc.github.io/purrr-tutorial/ls02_map-extraction-advanced.html)
+This is where I failed to get the locations, so I didn't continue on this task.
 
 ### 6. Work with a nested data frame
 
-Create a nested data frame and map a function over the list column holding the nested data. Use list extraction or other functions to pull interesting information out of these results and work your way back to a simple data frame you can visualize and explore.
-
-Here's a fully developed prompt for Gapminder:
-
--   See the [split-apply-combine lesson from Jenny Bryan](http://stat545.com/block024_group-nest-split-map.html)
--   Nest the data by country (and continent).
+I will first follow the [split-apply-combine lesson from Jenny Bryan](http://stat545.com/block024_group-nest-split-map.html) to nest `gapminder` data per country:
 
 ``` r
 # nest gapminder data for each country
@@ -224,7 +173,7 @@ head(gap_nested)
     ## 5 Americas  Argentina   <tibble [12 × 4]>
     ## 6 Oceania   Australia   <tibble [12 × 4]>
 
-Now our data consists of one row for each country with a nested list for each country that contains all of the other data for this country in the data column. Let's have a look at what is in this list for the first country (Afghanistan):
+Now our data consists of one row for each country with a nested list for each country in the data column that contains all of the other data for this country. Let's have a look at what is in this list for the first country (Afghanistan):
 
 ``` r
 # have a look at contents in data list of first country
@@ -422,31 +371,40 @@ gdpPercap
 </tr>
 </tbody>
 </table>
-We can see that the list in the data column contains the year, life expectancy, population and GDP per capita information. This is the case for each country in the gap\_nested data.
+We can see that the list in the data column contains the year, life expectancy, population and GDP per capita information. This is the case for each country in the `gap_nested$data` column.
 
 Before fitting a model, let's quickly plot life expectancy over the years for a few random countries to get a feel for how the data looks like:
 
 ``` r
+# make a function for plotting this:
+plot_lEY <- function(data, selection) {
+data %>% 
+  filter(country %in% selection) %>% 
+  ggplot(aes(year, lifeExp), size = 0.5) +
+  geom_point() +
+  geom_smooth(method = lm, size = 0.5, se = FALSE) +
+  facet_wrap(~country) +
+    theme_bw() +
+    labs(title = "Life Expectancy over the Years", x = "Year", y = "Life Expectancy") 
+}
+
+# select some randomly chosen countries
 country_selection <- c("Afghanistan", "Germany", "Canada", "Nepal", "Algeria", "Australia")
 
-gapminder %>% 
-  filter(country %in% country_selection) %>% 
-  ggplot(aes(year, lifeExp)) +
-  geom_point()+
-  geom_smooth(method = lm, size = 0.5) +
-  facet_wrap(~country) +
-  labs(title = "Life Expectancy over the years for a selection of countries", x = "Year", y = "Life Expectancy")
+# plot lifeExp over the years for these countries
+plot_lEY(gapminder, country_selection)
 ```
 
-![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-16-1.png)
+![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-13-1.png)
 
-Cool, life expectancy seems to be linearly increasing over the years for all of these random countries. Let's fit a linear model to see if that is actually the case for all countries. Using the nested data frame `gap_nested` and the `map` function allows us to do that for all countries at the same time.
+Cool, life expectancy seems to be linearly increasing over the years for all of these random countries. Let's fit a linear model to see how it looks for all countries. Using the nested data frame `gap_nested` and the `map` function allows us to do that for all countries at the same time.
 
-Reading through [this file from the STAT545 website](http://stat545.com/block012_function-regress-lifeexp-on-year.html), I learned that we need to specify the Intercept as the first year in the `gapminder` data, i.e. 1952 for the output to make sense.
+Reading through [this file from the STAT545 website](http://stat545.com/block012_function-regress-lifeexp-on-year.html), I learned that we need to specify the Intercept as the first year in the `gapminder` data, i.e. 1952. I will make use of this info in my linear model.
 
 Let's first make a function to fit the linear model that we can then use in `map` to apply it to all of our nested data.
 
 ``` r
+# make function that fits a linear model to life expectancy and year of a data set
 fit_lEY <- function(data) lm(lifeExp ~ I(year - 1952), data = data)
 ```
 
@@ -465,9 +423,10 @@ fit_lEY(gap_nested$data[[1]])
     ##    (Intercept)  I(year - 1952)  
     ##        29.9073          0.2753
 
-To fit it to all countries at the same time we can use the `map` function. I will store the output in a new list for each country under the new variable `fit` using the `mutate` function. .
+To fit it to all countries at the same time we can use the `map` function. I will store the output in a new variable `fit` that contains a list for each country with the linear model output using the `mutate` function. .
 
 ``` r
+ # fitting my linear model function to the data contained in each nested list in the data column of gap_nested
 gap_nested_fit <- gap_nested %>% 
   mutate(fit = map(data, fit_lEY))
 
@@ -484,10 +443,11 @@ head(gap_nested_fit)
     ## 5 Americas  Argentina   <tibble [12 × 4]> <S3: lm>
     ## 6 Oceania   Australia   <tibble [12 × 4]> <S3: lm>
 
-Great, now we have a new column that includes info on the linear model. Let's have a looks at what's in there for the first 3 countries:
+Great, now we have a new column that includes info on the linear model. Let's have a looks at what's in there for the first 2 countries:
 
 ``` r
-gap_nested_fit$fit[1:3]
+# subset the info in the fit column for the first two countries
+gap_nested_fit$fit[1:2]
 ```
 
     ## [[1]]
@@ -507,21 +467,9 @@ gap_nested_fit$fit[1:3]
     ## 
     ## Coefficients:
     ##    (Intercept)  I(year - 1952)  
-    ##        59.2291          0.3347  
-    ## 
-    ## 
-    ## [[3]]
-    ## 
-    ## Call:
-    ## lm(formula = lifeExp ~ I(year - 1952), data = data)
-    ## 
-    ## Coefficients:
-    ##    (Intercept)  I(year - 1952)  
-    ##        43.3750          0.5693
+    ##        59.2291          0.3347
 
-So we have the results from the linear model in each of these nested lists per country. We can extract more information about these results using the `broom` package. The `tidy` function from this package will give us the different parameters from a model nicely organized in a table. Here is how that looks like for the first country, i.e. Afghanistan:
-
--   Use functions for working with fitted models or the [broom package](https://github.com/tidyverse/broom) to get information out of your linear models.
+So we have the results from the linear model in each of these nested lists per country. We can extract more information about these results using the `broom` package. The `tidy` function from this package will give us the different parameters from a model nicely organized in a table. Here is how that looks for the first country, i.e. Afghanistan:
 
 ``` r
 # make function that applies broom function to the Afghanistan fit data and presents it in a kable
@@ -569,12 +517,13 @@ broom_apply_Afgh(glance)
 |----------:|--------------:|---------:|----------:|--------:|----:|----------:|---------:|---------:|---------:|------------:|
 |  0.9477123|      0.9424835|  1.222788|   181.2494|    1e-07|    2|  -18.34693|  42.69387|  44.14859|   14.9521|           10|
 
-We can get this info for all countries at the same time using the `map` function again and create a a new variable again that contains a list for each country containing this data. Let's add the output of each of the 3 `broom` functions to each country as a separate list, in a new column each:
+We can get this info for all countries at the same time using the `map` function again, creating a new variable again that contains a list for each country containing this data. Let's add the output of each of the 3 `broom` functions to each country as a separate list, in a new column each:
 
 ``` r
+# fit tidy, augment, and glance to data in the fit column and add the output as new nested lists for each country to our tibble
 gap_nested_fit_data <- gap_nested_fit %>% 
   mutate(tidy = map(fit, tidy),
-         augment = map( fit, augment),
+         augment = map(fit, augment),
          glance = map(fit, glance))
 
 head(gap_nested_fit_data)
@@ -595,6 +544,7 @@ Let's unnest these to create 3 different tibbles, one for each `broom` function 
 Let's create a function for that:
 
 ``` r
+# make function that unnests data of a specific column in our gap_nested_fit_data
 gap_fit_unnest <- function(x) {
   gap_nested_fit_data %>% 
   select(continent, country, x) %>% 
@@ -605,7 +555,8 @@ gap_fit_unnest <- function(x) {
 First for the `tidy` output:
 
 ``` r
-lEY_fit_tidy <- gap_fit_unnest("tidy") # unnest data from tidy list
+# unnest data from tidy list
+lEY_fit_tidy <- gap_fit_unnest("tidy") 
 
 kable(head(lEY_fit_tidy))
 ```
@@ -619,10 +570,11 @@ kable(head(lEY_fit_tidy))
 | Africa    | Algeria     | (Intercept)    |  43.3749744|  0.7184202|   60.37549|  0.0e+00|
 | Africa    | Algeria     | I(year - 1952) |   0.5692797|  0.0221271|   25.72775|  0.0e+00|
 
-Next, for the `augment` output:
+Next, unnest the `augment` output:
 
 ``` r
-lEY_fit_augment <- gap_fit_unnest("augment") # unnest data from augment list
+# unnest data from augment list
+lEY_fit_augment <- gap_fit_unnest("augment") 
 
 kable(head(lEY_fit_augment))
 ```
@@ -639,7 +591,8 @@ kable(head(lEY_fit_augment))
 And lastly for the `glance` data:
 
 ``` r
-lEY_fit_glance <- gap_fit_unnest("glance") # unnest data from glance list
+# unnest data from glance list
+lEY_fit_glance <- gap_fit_unnest("glance") 
 
 kable(head(lEY_fit_glance))
 ```
@@ -655,58 +608,10 @@ kable(head(lEY_fit_glance))
 
 Great, now we have 3 different tibbles with information from the linear model for every country.
 
--   Use the usual dplyr, tidyr, and ggplot2 workflows to explore, e.g., the estimated cofficients.
-
-Let's use the `lEY_fit_augment` data to make a plot that shows the estimated and the real life Exp to visualize the residuals. Let's do it for the same countries as plotted above:
+Let's see if we can find the countries with the highest residuals:
 
 ``` r
-# select relevant columns
-gap_year_data <- gapminder %>% 
-  select(country, lifeExp, year)
-
-lEY_fit_augment <- left_join(lEY_fit_augment, gap_year_data)
-
-head(lEY_fit_augment)
-```
-
-    ## # A tibble: 6 x 12
-    ##   continent country  lifeExp I.year...1952. .fitted .se.fit  .resid   .hat
-    ##   <fct>     <fct>      <dbl>          <dbl>   <dbl>   <dbl>   <dbl>  <dbl>
-    ## 1 Asia      Afghani…    28.8             0.    29.9   0.664 -1.11   0.295 
-    ## 2 Asia      Afghani…    30.3             5.    31.3   0.580 -0.952  0.225 
-    ## 3 Asia      Afghani…    32.0            10.    32.7   0.503 -0.664  0.169 
-    ## 4 Asia      Afghani…    34.0            15.    34.0   0.436 -0.0172 0.127 
-    ## 5 Asia      Afghani…    36.1            20.    35.4   0.385  0.674  0.0991
-    ## 6 Asia      Afghani…    38.4            25.    36.8   0.357  1.65   0.0851
-    ## # ... with 4 more variables: .sigma <dbl>, .cooksd <dbl>,
-    ## #   .std.resid <dbl>, year <int>
-
-``` r
-# make a function for plotting this:
-plot_lEY <- function(data, selection) {
-data %>% 
-  filter(country %in% selection) %>% 
-  ggplot() +
-  geom_point(aes(year, lifeExp), size = 0.5, colour = "red") +
-  geom_point(aes(year, .fitted), size = 0.5, colour = "blue") +
-  geom_smooth(aes(year, .fitted), size = 0.5, se = FALSE) +
-  facet_wrap(~country) +
-    theme_bw() +
-    labs(title = "Linear Model Estimates and Real Life Expectancy over the Years in Select Countries", 
-         x= "Year", 
-         y = "Life Expectancy") 
-}
-
-plot_lEY(lEY_fit_augment, country_selection) # plot randomly selected countries from above
-```
-
-    ## `geom_smooth()` using method = 'loess' and formula 'y ~ x'
-
-![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-30-1.png)
-
-We can see that the residuals are really close to the estimated life expectancies from our model. Let's see if we can find the country with the biggest residuals:
-
-``` r
+# extracting the max residual for each country
 lEY_max_res <- lEY_fit_augment %>% 
   group_by(country) %>% 
   summarize(max_res = max(.resid)) %>% 
@@ -735,18 +640,17 @@ lEY_max_res <- lEY_max_res %>%
 lEY_max_res_countries <- levels(lEY_max_res$country)[1:6]
 
 # plot estimated and real life expectancy for these countries
-plot_lEY(lEY_fit_augment, lEY_max_res_countries)
+plot_lEY(gapminder, lEY_max_res_countries)
 ```
 
-    ## `geom_smooth()` using method = 'loess' and formula 'y ~ x'
-
-![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-32-1.png)
+![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-27-1.png)
 
 We can see that the linear model is not a great fit in these countries.
 
 We can also use the rsquared value from the `glance` data to find the countries in which the models fit best, or worst:
 
 ``` r
+# reorder countries by r squared value
 lEY_max_r2 <- lEY_fit_glance %>% 
   select(country, r.squared) %>% 
   arrange(desc(r.squared)) %>% 
@@ -777,18 +681,15 @@ lEY_max_r2_countries <- get_countries(lEY_max_r2)
 Let's plot these:
 
 ``` r
-plot_lEY(lEY_fit_augment, lEY_max_r2_countries)
+plot_lEY(gapminder, lEY_max_r2_countries)
 ```
 
-    ## `geom_smooth()` using method = 'loess' and formula 'y ~ x'
+![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-30-1.png) We can see that Brazil, France and Mauritania have a really good fit, while Botswana, Rwanda and Zimbabwe have fairly high residuals. These 3 countries with the lowest fit are also the countries with the biggest estimates in the above analysis (which makes sense)
 
-![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-35-1.png)
-
-Let's see if we can find the countries with the steepest increase in lifeExp over the years. First I'll make the tidy data easier to work with.
-
-And as in Jenny Bryan's tutorial, let's recode the term variable in the tidy data frame so that it is easier to work with it:
+Let's see if we can find the countries with the steepest increase in life expectancy over the years. First I'll make the tidy data easier to work with. Aas in Jenny Bryan's tutorial, let's recode the term variable in the tidy data frame:
 
 ``` r
+# change names in term variable
 lEY_fit_tidy <- lEY_fit_tidy %>% 
   mutate(term = recode(term,
                         `(Intercept)` = "intercept",
@@ -809,7 +710,8 @@ kable(head(lEY_fit_tidy))
 Next, I'll make it an "untidy" data frame, with estimates for intercept and slope as their own columns and arrange by slope and reorder factor levels accordingly:
 
 ``` r
-lEY_max_slope <- fit_tidy_spread <- lEY_fit_tidy %>% 
+# spread data so that there are sparate columns for the intercept and slope estimates
+lEY_max_slope <- lEY_fit_tidy %>% 
   select(continent:estimate) %>% 
   spread(key = term, value = estimate) %>% 
   arrange(desc(slope)) %>% 
@@ -834,16 +736,9 @@ Let's extract the 3 countries with steepest slope and the 3 countries with the l
 lEY_max_slope_countries <- get_countries(lEY_max_slope)
 
 # plot estimated and real life expectancy for these countries
-plot_lEY(lEY_fit_augment, lEY_max_slope_countries)
+plot_lEY(gapminder, lEY_max_slope_countries)
 ```
 
-    ## `geom_smooth()` using method = 'loess' and formula 'y ~ x'
+![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-33-1.png)
 
-![](HW06-Data_wrangling_wrap_up_files/figure-markdown_github/unnamed-chunk-38-1.png)
-
-Inspiration for the modelling and downstream inspiration
-
--   Find countries with interesting stories. - Sudden, substantial departures from the temporal trend is interesting. How could you operationalize this notion of "interesting"?
--   Use the residuals to detect countries where your model is a terrible fit. Examples: Are there are 1 or more freakishly large residuals, in an absolute sense or relative to some estimate of background variability? Are there strong patterns in the sign of the residuals? E.g., all pos, then all neg, then pos again.
--   Fit a regression using ordinary least squares and a robust technique. Determine the difference in estimated parameters under the two approaches. If it is large, consider that country "interesting".
--   Compare a linear and quadratic fit
+Oman, Saudi Arabia and Vietnam had a steep increase in life expectancy over the years, while in Rwanda, Zambia and Zimbabwe the life expectancy didn't change or even slightly decreased over the years.
